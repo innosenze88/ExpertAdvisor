@@ -10,24 +10,31 @@
 
 //--- ต้องใช้ไลบรารีสำหรับฟังก์ชัน Socket
 #include <stdlib.mqh> 
+#include <Trade\Trade.mqh>
 
 //--- การตั้งค่าพารามิเตอร์ภายนอกที่ปรับเปลี่ยนได้
-input string AIServerIP   = "127.0.0.1"; // IP Address ของ AI Server
-input int    AIServerPort = 8888;        // Port ของ AI Server
+input string AIServerIP   = "scaling-succotash-x5grr544v4jghvpqw-8888.app.github.dev";
+input int    AIServerPort = 443;        // Port ของ AI Server
 input double Volume       = 0.01;        // ปริมาณการซื้อขายเริ่มต้น
 
 //--- ตัวแปรภายในสำหรับจัดการ Socket และสัญญาณ AI
 int               m_socket_handle = -1; // Handle สำหรับ Socket
 double            m_ai_signal     = 0.0;  // ค่าสัญญาณที่รับจาก AI (เช่น 1.0=Buy, -1.0=Sell)
 
+CTrade m_trade;
+
 //+------------------------------------------------------------------+
 //| ฟังก์ชันเริ่มต้น (Initialization Function)                       |
 //+------------------------------------------------------------------+
 int OnInit()
 {
-    // ตั้งค่าความถี่ในการตรวจสอบ Socket
-    EventSetTimer(1); // กำหนดให้ OnTimer() ทำงานทุก 1 วินาที
-    return(INIT_SUCCEEDED);
+   // ตั้งค่าความถี่ในการตรวจสอบ Socket
+    EventSetTimer(1); // กำหนดให้ OnTimer() ทำงานทุก 1 วินาที
+    
+    // ตั้งค่า Magic Number ให้กับ Object การซื้อขาย (ป้องกัน Bug จาก EA ตัวอื่น)
+    m_trade.SetExpertMagicNumber(12345); // <--- เพิ่มบรรทัดนี้ใน OnInit()
+    
+    return(INIT_SUCCEEDED);
 }
 
 //+------------------------------------------------------------------+
@@ -135,23 +142,55 @@ void ReceiveAISignal()
 
 //+------------------------------------------------------------------+
 //| ฟังก์ชันตัดสินใจซื้อขายตามสัญญาณ AI                             |
+//| **สำคัญ: ต้องใส่ Logic ตรวจสอบการเปิด Position ก่อนเสมอ** |
 //+------------------------------------------------------------------+
 void ExecuteTradeBasedOnSignal()
 {
-    if (m_ai_signal > 0.5)
+    // ตรวจสอบว่ามี Position เปิดอยู่สำหรับคู่เงินนี้หรือไม่
+    bool has_position = PositionSelect(_Symbol); // คืนค่า true หากมี position สำหรับ Symbol นี้
+
+    if (m_ai_signal > 0.5) // สัญญาณ BUY
     {
-        // คำสั่งซื้อ (Buy)
-        Print("Signal: BUY - Logic to send order will go here.");
+        if (has_position)
+        {
+            // ตรรกะการจัดการ Position ที่มีอยู่
+            long current_position_type = PositionGetInteger(POSITION_TYPE);
+            if (current_position_type == POSITION_TYPE_SELL)
+            {
+                // สวนทาง: ปิด Sell แล้วเปิด Buy
+                m_trade.PositionClose(_Symbol);
+                Print("AI Signal: CLOSING SELL to PREPARE BUY.");
+            }
+            else { return; } // มี Buy อยู่แล้ว ไม่ทำอะไร
+        }
+        
+        // ส่งคำสั่ง BUY
+        m_trade.Buy(Volume, _Symbol, 0, 0, 0, "AI BUY Signal");
+        Print("AI Signal: EXECUTE BUY Order (Volume: ", Volume, ")");
     }
-    else if (m_ai_signal < -0.5)
+    else if (m_ai_signal < -0.5) // สัญญาณ SELL
     {
-        // คำสั่งขาย (Sell)
-        Print("Signal: SELL - Logic to send order will go here.");
+        if (has_position)
+        {
+            // ตรรกะการจัดการ Position ที่มีอยู่
+            long current_position_type = PositionGetInteger(POSITION_TYPE);
+            if (current_position_type == POSITION_TYPE_BUY)
+            {
+                // สวนทาง: ปิด Buy แล้วเปิด Sell
+                m_trade.PositionClose(_Symbol);
+                Print("AI Signal: CLOSING BUY to PREPARE SELL.");
+            }
+            else { return; } // มี Sell อยู่แล้ว ไม่ทำอะไร
+        }
+        
+        // ส่งคำสั่ง SELL
+        m_trade.Sell(Volume, _Symbol, 0, 0, 0, "AI SELL Signal");
+        Print("AI Signal: EXECUTE SELL Order (Volume: ", Volume, ")");
     }
-    else
+    else // สัญญาณ NEUTRAL
     {
-        // ไม่ทำอะไร
-        Print("Signal: NEUTRAL - Holding position.");
+        // หากต้องการให้ EA ปิด Position เมื่อสัญญาณเป็นกลาง:
+        // if (has_position) { m_trade.PositionClose(_Symbol); }
     }
 }
 
