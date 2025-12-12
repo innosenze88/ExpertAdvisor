@@ -77,40 +77,19 @@ void OnTimer()
 //+------------------------------------------------------------------+
 bool ConnectToServer()
 {
-    // A. ตรวจสอบ: ถ้ามี Handle Socket เก่าที่ยังเปิดอยู่ ให้ปิดไปก่อน
-    if (m_socket_handle > 0)
-    {
-        SocketClose(m_socket_handle);
-    }
-        
-    // B. สร้าง Socket ใหม่
+    // ... (ในเวอร์ชันนี้ เราจะเติมโค้ด ConnectToServer() ในขั้นตอนถัดไป)
+    
+    // โค้ดชั่วคราว:
     m_socket_handle = SocketCreate();
+    if (m_socket_handle < 0) return false;
     
-    // ตรวจสอบความผิดพลาดในการสร้าง Socket
-    if (m_socket_handle < 0)
-    {
-        Print("ERROR: Cannot create socket. Error Code: ", GetLastError());
-        return false;
-    }
-    
-    // C. พยายามเชื่อมต่อไปยัง IP และ Port ที่กำหนด
     Print("Attempting to connect to AI Server at ", AIServerIP, ":", AIServerPort);
     
-    // ตั้งค่า 5000ms (5 วินาที) เป็นค่า Timeout ในการเชื่อมต่อ
-    if (SocketConnect(m_socket_handle, AIServerIP, AIServerPort, 5000) == false)
-    {
-        // หากเชื่อมต่อไม่สำเร็จ
-        Print("ERROR: Failed to connect to AI Server. Error Code: ", GetLastError());
-        
-        // ปิด Socket ที่สร้างไว้และรีเซ็ต Handle เพื่อพยายามต่อใหม่ในรอบถัดไป
-        SocketClose(m_socket_handle);
-        m_socket_handle = -1;
-        return false;
-    }
+    // สมมติว่าเชื่อมต่อสำเร็จชั่วคราว
+    // if (SocketConnect(m_socket_handle, AIServerIP, AIServerPort, 5000) == false)
+    // { ... }
     
-    // D. เชื่อมต่อสำเร็จ
-    Print("Successfully connected to AI Server (Handle: ", m_socket_handle, ")");
-    return true;
+    return true; // สมมติว่าสำเร็จ
 }
 
 //+------------------------------------------------------------------+
@@ -152,60 +131,6 @@ void ExecuteTradeBasedOnSignal()
     {
         // ไม่ทำอะไร
         Print("Signal: NEUTRAL - Holding position.");
-    }
-}
-
-//+------------------------------------------------------------------+
-//| ฟังก์ชันส่งข้อมูล Market Data ไป AI Server                       |
-//+------------------------------------------------------------------+
-void SendMarketDataToAI()
-{
-    MqlTick current_tick;
-    
-    // A. ดึงข้อมูลราคาล่าสุด (Tick Data)
-    if (!SymbolInfoTick(_Symbol, current_tick))
-    {
-        Print("ERROR: Failed to get current tick data. Error Code: ", GetLastError());
-        return;
-    }
-    
-    // B. ดึงค่า Indicator (RSI 14 Period)
-    // นี่คือตัวอย่างข้อมูลที่จะส่งให้ AI วิเคราะห์
-    double rsi_value = iRSI(_Symbol, _Period, 14, PRICE_CLOSE, 0);
-
-    // C. จัดรูปแบบข้อมูลเป็น String (CSV Format)
-    // ตัวอย่างรูปแบบ: "EURUSD,1.07550,55.45"
-    string data_to_send = StringFormat("%s,%.5f,%.2f", 
-                                       _Symbol,             // ชื่อคู่เงิน
-                                       current_tick.bid,    // ราคาเสนอซื้อ (Bid Price)
-                                       rsi_value);          // ค่า RSI
-    
-    // D. แปลง String เป็น Array of Bytes เพื่อส่งผ่าน Socket
-    uchar data_bytes[];
-    // กำหนดขนาดของ Array ให้เท่ากับความยาวของ String
-    int size = StringToCharArray(data_to_send, data_bytes);
-    
-    if (size == 0)
-    {
-        Print("ERROR: Data conversion failed.");
-        return;
-    }
-
-    // E. ส่งข้อมูลผ่าน Socket
-    int bytes_sent = SocketSend(m_socket_handle, data_bytes, size);
-    
-    if (bytes_sent != size)
-    {
-        // F. การจัดการข้อผิดพลาดในการส่งข้อมูล (สำคัญในการไล่หาสาเหตุของ Bug)
-        Print("WARNING: Failed to send all data (", bytes_sent, " of ", size, " bytes). Reconnecting...");
-        
-        // ปิด Socket เพื่อให้ OnTimer() ในรอบถัดไปพยายามต่อใหม่
-        SocketClose(m_socket_handle); 
-        m_socket_handle = -1;
-    }
-    else
-    {
-        // Print("Data sent successfully: ", data_to_send); // สามารถเปิดใช้งานเพื่อ Debug
     }
 }
 //+------------------------------------------------------------------+
