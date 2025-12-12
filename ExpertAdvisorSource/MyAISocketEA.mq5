@@ -208,4 +208,45 @@ void SendMarketDataToAI()
         // Print("Data sent successfully: ", data_to_send); // สามารถเปิดใช้งานเพื่อ Debug
     }
 }
+
+//+------------------------------------------------------------------+
+//| ฟังก์ชันรับสัญญาณจาก AI Server                                   |
+//+------------------------------------------------------------------+
+void ReceiveAISignal()
+{
+    uchar buffer[64]; // กำหนดขนาด Buffer ที่เล็กพอสมควรสำหรับการรับค่า Signal
+    
+    // ตั้งค่า Timeout เพียง 100ms เพื่อไม่ให้ EA ติดค้างรอนานเกินไป
+    int bytes_received = SocketRead(m_socket_handle, buffer, ArraySize(buffer), 100); 
+    
+    if (bytes_received > 0)
+    {
+        // A. แปลงข้อมูลที่ได้รับเป็น String
+        string signal_string = CharArrayToString(buffer, 0, bytes_received);
+        
+        // B. ลบช่องว่างหรืออักขระที่ไม่จำเป็น (Trim)
+        StringTrimLeft(signal_string);
+        StringTrimRight(signal_string);
+
+        // C. แปลง String เป็น Double
+        double new_signal = StringToDouble(signal_string);
+        
+        // D. อัปเดตสัญญาณ AI
+        m_ai_signal = new_signal;
+        
+        // Print สัญญาณที่ได้รับเพื่อ Debug และติดตามผล
+        Print("AI Signal Received: ", signal_string, " -> ", m_ai_signal);
+    }
+    else if (bytes_received < 0)
+    {
+        // E. การจัดการข้อผิดพลาดในการรับข้อมูล
+        // Error Code < 0 หมายถึงปัญหาเครือข่าย/การเชื่อมต่อหลุด
+        Print("ERROR: Connection dropped while reading signal. Error Code: ", GetLastError());
+        
+        // ปิด Socket เพื่อให้ OnTimer() พยายามต่อใหม่ในรอบถัดไป
+        SocketClose(m_socket_handle);
+        m_socket_handle = -1;
+    }
+    // Note: bytes_received == 0 หมายถึงยังไม่มีข้อมูลเข้ามา (เป็นเรื่องปกติ)
+}
 //+------------------------------------------------------------------+
